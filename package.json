@@ -32,6 +32,10 @@
     "typescript-eslint": "^8.0.0"
   },
   "dependencies": {
-    "engine.io-client": "^6.6.5"
+    "engine.io-client": "^6.6.5",
+    "framer-motion": "^12.40.0",
+    "lucide-react": "^1.16.0",
+    "next-themes": "^0.4.6",
+    "react": "^19.2.6"
   }
 }
