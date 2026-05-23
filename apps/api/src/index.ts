@@ -16,11 +16,13 @@ import { PostgresModerationStore } from "./moderation/store.js";
 import { ModerationService } from "./moderation/service.js";
 import { OutboxNotifier } from "./notifications/notifier.js";
 import { logger } from "./observability/logger.js";
+import { loadIntegrations } from "./integrations/registry.js";
 
 const config = loadConfig();
 const pool = createPool(config);
 await initializeAuthSchema(pool);
 await runMigrations(pool);
+const integrations = loadIntegrations();
 const authStore = new PgAuthStore(pool);
 const notifier = new OutboxNotifier(authStore);
 const marketplaceStore = new PgMarketplaceStore(pool);
@@ -48,7 +50,8 @@ const app = createApp({
   paymentService,
   rewardsService,
   moderationService,
-  notifier
+  notifier,
+  integrations
 });
 const server = createServer(app);
 createChatRealtimeServer({ server, service: chatService, config });

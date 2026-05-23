@@ -123,7 +123,9 @@ async function request(
   if (text) {
     try {
       parsed = JSON.parse(text);
-    } catch {}
+    } catch {
+      /* tolerated */
+    }
   }
   return { status: response.status, body: parsed };
 }

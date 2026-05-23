@@ -20,6 +20,10 @@ import { createModerationRouter } from "./moderation/routes.js";
 import type { ModerationService } from "./moderation/service.js";
 import type { Notifier } from "./notifications/notifier.js";
 import { httpLogger } from "./observability/http-logger.js";
+import { inputGuard } from "./observability/input-guard.js";
+import { createUploadRouter } from "./uploads/routes.js";
+import { createOAuthRouter } from "./auth/oauth-routes.js";
+import type { IntegrationRegistry } from "./integrations/registry.js";
 import { logger } from "./observability/logger.js";
 
 export function createApp(options: {
@@ -31,6 +35,7 @@ export function createApp(options: {
   rewardsService?: RewardsService;
   moderationService?: ModerationService;
   notifier?: Notifier;
+  integrations?: IntegrationRegistry;
 }) {
   const app = express();
   app.use(httpLogger);
@@ -48,7 +53,20 @@ export function createApp(options: {
       )
     : null;
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+          "frame-ancestors": ["'none'"]
+        }
+      },
+      crossOriginResourcePolicy: { policy: "same-site" },
+      referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+      hidePoweredBy: true
+    })
+  );
+  app.disable("x-powered-by");
   app.use(
     cors({
       credentials: true,
@@ -61,6 +79,7 @@ export function createApp(options: {
   app.use("/payments/webhook", express.raw({ type: "application/json" }));
 
   app.use(express.json({ limit: "1mb" }));
+  app.use(inputGuard({ maxDepth: 8, maxArrayLength: 200 }));
 
   app.get("/health", (_request, response) => {
     response.json(getHealthPayload());
@@ -98,6 +117,23 @@ export function createApp(options: {
     app.use(
       "/",
       createModerationRouter(options.moderationService, options.config, options.authStore)
+    );
+  }
+  if (options.integrations) {
+    app.use(
+      "/uploads",
+      createUploadRouter(options.integrations.storage, options.config, options.authStore)
+    );
+    app.use(
+      "/auth/oauth",
+      createOAuthRouter({
+        providers: {
+          google: options.integrations.googleOauth,
+          vk: options.integrations.vkOauth
+        },
+        store: options.authStore,
+        config: options.config
+      })
     );
   }
   app.use("/dev", createDevRouter(options.authStore, options.config));

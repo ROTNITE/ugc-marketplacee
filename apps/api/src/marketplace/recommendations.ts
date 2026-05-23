@@ -522,3 +522,36 @@ function itemDate(item: CampaignRecord | ProfileRecord): Date {
 function itemId(item: CampaignRecord | ProfileRecord): string {
   return "id" in item ? item.id : item.userId;
 }
+
+/**
+ * Behavioral-signal upgrade: trim a swipe-interaction history list so old
+ * behaviour doesn't dominate a creator's recommendations forever.
+ *
+ * - Interactions newer than 30 days keep full weight.
+ * - 30 to 90 days: weight is reduced (caller may downsample by skipping
+ *   half of these via the returned `lowConfidence` set).
+ * - Older than 90 days: dropped entirely.
+ *
+ * Callers should pre-process `interactions` with this helper before
+ * passing them to `scoreCampaignsForCreator` / `scoreCreatorsForBrand`.
+ */
+export function applyTemporalDecay(
+  interactions: SwipeInteractionRecord[],
+  now: Date = new Date()
+): { kept: SwipeInteractionRecord[]; lowConfidence: Set<string> } {
+  const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
+  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+  const kept: SwipeInteractionRecord[] = [];
+  const lowConfidence = new Set<string>();
+
+  for (const interaction of interactions) {
+    const ageMs = now.getTime() - interaction.createdAt.getTime();
+    if (ageMs > ninetyDaysMs) continue;
+    kept.push(interaction);
+    if (ageMs > thirtyDaysMs) {
+      lowConfidence.add(interaction.id);
+    }
+  }
+
+  return { kept, lowConfidence };
+}
