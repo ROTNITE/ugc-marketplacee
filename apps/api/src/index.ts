@@ -14,6 +14,7 @@ import { RewardsService } from "./rewards/service.js";
 import { PostgresModerationStore } from "./moderation/store.js";
 import { ModerationService } from "./moderation/service.js";
 import { OutboxNotifier } from "./notifications/notifier.js";
+import { logger } from "./observability/logger.js";
 
 const config = loadConfig();
 const pool = createPool(config);
@@ -51,5 +52,5 @@ const server = createServer(app);
 createChatRealtimeServer({ server, service: chatService, config });
 
 server.listen(config.port, config.host, () => {
-  console.log(`API listening on http://${config.host}:${config.port}`);
+  logger.info({ host: config.host, port: config.port }, "API listening");
 });

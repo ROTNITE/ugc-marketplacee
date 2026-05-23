@@ -6,6 +6,7 @@ import { requireAdultActions } from "../auth/adult-actions.js";
 import type { AuthStore } from "../auth/store.js";
 import type { AccessTokenClaims } from "../auth/security.js";
 import type { ApiConfig } from "../config.js";
+import { logger } from "../observability/logger.js";
 
 type AuthRequest = Request & { auth: AccessTokenClaims };
 
@@ -247,16 +248,16 @@ export function createPaymentRoutes(
           }
           case "payment_intent.payment_failed": {
             // Handle failed payment
-            console.error("Payment failed:", event.data.object);
+            logger.error({ event: event.data.object }, "payment failed");
             break;
           }
           default:
-            console.log(`Unhandled event type: ${event.type}`);
+            logger.warn({ type: event.type }, "unhandled stripe event");
         }
 
         res.json({ received: true });
       } catch (error) {
-        console.error("Webhook error:", error);
+        logger.error({ err: error }, "stripe webhook error");
         res.status(400).json({
           error: { code: "WEBHOOK_ERROR", message: "Webhook processing failed" }
         });

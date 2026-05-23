@@ -19,6 +19,8 @@ import type { RewardsService } from "./rewards/service.js";
 import { createModerationRouter } from "./moderation/routes.js";
 import type { ModerationService } from "./moderation/service.js";
 import type { Notifier } from "./notifications/notifier.js";
+import { httpLogger } from "./observability/http-logger.js";
+import { logger } from "./observability/logger.js";
 
 export function createApp(options: {
   config: ReturnType<typeof loadConfig>;
@@ -31,6 +33,7 @@ export function createApp(options: {
   notifier?: Notifier;
 }) {
   const app = express();
+  app.use(httpLogger);
   const authService = new AuthService(
     options.authStore,
     options.config,
@@ -107,7 +110,7 @@ export function createApp(options: {
       _next: express.NextFunction
     ) => {
       void _next;
-      console.error(error);
+      logger.error({ err: error }, "unhandled error");
       response.status(500).json({
         error: {
           code: "INTERNAL_SERVER_ERROR",
