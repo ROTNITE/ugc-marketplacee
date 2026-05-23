@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # UGC Marketplace
 
 Infrastructure scaffold for a bilingual UGC influencer marketplace.
@@ -71,3 +72,6 @@ npm run build
 ```
 
 The CI workflow runs the same baseline checks with `npm run ci`.
+=======
+# ugc-marketplacee
+>>>>>>> 5fd82d0ec74b7b5e5bc744514ff375530cf9e70b
