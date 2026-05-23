@@ -1,13 +1,25 @@
 import pg from "pg";
 import type { ApiConfig } from "./config.js";
 
-export function createPool(config: Pick<ApiConfig, "databaseUrl">): pg.Pool {
+/**
+ * Create a connection pool. Returns null if DATABASE_URL is not configured.
+ */
+export function createPool(config: Pick<ApiConfig, "databaseUrl">): pg.Pool | null {
+  if (!config.databaseUrl) {
+    console.warn("DATABASE_URL not configured. Database features will be disabled.");
+    return null;
+  }
   return new pg.Pool({
     connectionString: config.databaseUrl
   });
 }
 
-export async function initializeAuthSchema(pool: pg.Pool): Promise<void> {
+export async function initializeAuthSchema(pool: pg.Pool | null): Promise<void> {
+  if (!pool) {
+    console.warn("Skipping schema initialization: no database pool available.");
+    return;
+  }
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id uuid PRIMARY KEY,

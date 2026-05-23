@@ -22,26 +22,28 @@ import type { Notifier } from "./notifications/notifier.js";
 
 export function createApp(options: {
   config: ReturnType<typeof loadConfig>;
-  authStore: AuthStore;
-  chatService?: ChatService;
-  marketplaceStore?: MarketplaceStore;
-  paymentService?: PaymentService;
-  rewardsService?: RewardsService;
-  moderationService?: ModerationService;
-  notifier?: Notifier;
+  authStore: AuthStore | null;
+  chatService?: ChatService | null;
+  marketplaceStore?: MarketplaceStore | null;
+  paymentService?: PaymentService | null;
+  rewardsService?: RewardsService | null;
+  moderationService?: ModerationService | null;
+  notifier?: Notifier | null;
 }) {
   const app = express();
-  const authService = new AuthService(
-    options.authStore,
-    options.config,
-    options.rewardsService
-  );
+  const authService = options.authStore
+    ? new AuthService(
+        options.authStore,
+        options.config,
+        options.rewardsService ?? undefined
+      )
+    : null;
   const marketplaceService = options.marketplaceStore
     ? new MarketplaceService(
         options.marketplaceStore,
         options.config,
-        options.rewardsService,
-        options.notifier
+        options.rewardsService ?? undefined,
+        options.notifier ?? undefined
       )
     : null;
 
@@ -62,20 +64,33 @@ export function createApp(options: {
   app.get("/health", (_request, response) => {
     response.json(getHealthPayload());
   });
-  app.use("/auth", createAuthRouter(authService, options.config, options.authStore));
-  if (marketplaceService) {
+  
+  // Auth routes - only available when database is connected
+  if (authService && options.authStore) {
+    app.use("/auth", createAuthRouter(authService, options.config, options.authStore));
+    app.use("/dev", createDevRouter(options.authStore, options.config));
+  } else {
+    // Fallback routes when auth is not available
+    app.use("/auth", (_req, res) => {
+      res.status(503).json({ 
+        error: { code: "SERVICE_UNAVAILABLE", message: "Auth service unavailable - database not connected" }
+      });
+    });
+  }
+  
+  if (marketplaceService && options.authStore) {
     app.use(
       "/",
       createMarketplaceRouter(marketplaceService, options.config, options.authStore)
     );
   }
-  if (options.chatService) {
+  if (options.chatService && options.authStore) {
     app.use(
       "/",
       createChatRouter(options.chatService, options.config, options.authStore)
     );
   }
-  if (options.paymentService) {
+  if (options.paymentService && options.authStore) {
     app.use(
       "/payments",
       createPaymentRoutes(options.paymentService, options.config, options.authStore)
@@ -85,19 +100,18 @@ export function createApp(options: {
       createDeliverableRoutes(options.paymentService, options.config, options.authStore)
     );
   }
-  if (options.rewardsService) {
+  if (options.rewardsService && options.authStore) {
     app.use(
       "/",
       createRewardsRouter(options.rewardsService, options.config, options.authStore)
     );
   }
-  if (options.moderationService) {
+  if (options.moderationService && options.authStore) {
     app.use(
       "/",
       createModerationRouter(options.moderationService, options.config, options.authStore)
     );
   }
-  app.use("/dev", createDevRouter(options.authStore, options.config));
   app.use(authErrorHandler);
   app.use(
     (

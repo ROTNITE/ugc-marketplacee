@@ -18,43 +18,64 @@ import { OutboxNotifier } from "./notifications/notifier.js";
 const config = loadConfig();
 const pool = createPool(config);
 
+// Track if database is available
+let dbAvailable = false;
+
 // Gracefully handle missing database — log warning instead of crashing.
 // Useful for CI, v0.dev preview, and local dev without PostgreSQL.
-try {
-  await initializeAuthSchema(pool);
-} catch (error) {
-  console.warn(
-    "WARNING: Could not connect to database. The API will not serve DB-backed routes.",
-    (error as Error).message,
-  );
+if (pool) {
+  try {
+    await initializeAuthSchema(pool);
+    dbAvailable = true;
+    console.log("Database connected and schema initialized.");
+  } catch (error) {
+    console.warn(
+      "WARNING: Could not connect to database. The API will run in degraded mode.",
+      (error as Error).message,
+    );
+  }
+} else {
+  console.warn("WARNING: DATABASE_URL not set. Running API without database.");
 }
 
-const authStore = new PgAuthStore(pool);
-const notifier = new OutboxNotifier(authStore);
-const marketplaceStore = new PgMarketplaceStore(pool);
-const chatStore = new PgChatStore(pool);
-const chatService = new ChatService(chatStore, marketplaceStore, notifier);
-const rewardsService = new RewardsService(new PostgresRewardsStore(pool), config);
+// Create stores - they will handle null pool gracefully
+const authStore = pool ? new PgAuthStore(pool) : null;
+const notifier = authStore ? new OutboxNotifier(authStore) : null;
+const marketplaceStore = pool ? new PgMarketplaceStore(pool) : null;
+const chatStore = pool ? new PgChatStore(pool) : null;
+const chatService = chatStore && marketplaceStore && notifier 
+  ? new ChatService(chatStore, marketplaceStore, notifier) 
+  : null;
+const rewardsStore = pool ? new PostgresRewardsStore(pool) : null;
+const rewardsService = rewardsStore ? new RewardsService(rewardsStore, config) : null;
 
 // PaymentService needs Stripe — gracefully skip if not configured
-let paymentService: PaymentService | undefined;
-try {
-  paymentService = new PaymentService(
-    new PostgresPaymentStore(pool),
-    marketplaceStore,
-    config,
-    rewardsService,
-  );
-} catch (error) {
-  console.warn("WARNING: PaymentService not available.", (error as Error).message);
+let paymentService: PaymentService | null = null;
+if (pool && marketplaceStore && rewardsService && config.stripeSecretKey) {
+  try {
+    paymentService = new PaymentService(
+      new PostgresPaymentStore(pool),
+      marketplaceStore,
+      config,
+      rewardsService,
+    );
+    console.log("Stripe payment service initialized.");
+  } catch (error) {
+    console.warn("WARNING: PaymentService not available.", (error as Error).message);
+  }
+} else if (!config.stripeSecretKey) {
+  console.warn("WARNING: STRIPE_SECRET_KEY not set. Payment features disabled.");
 }
 
-const moderationService = new ModerationService(
-  new PostgresModerationStore(pool),
-  authStore,
-  marketplaceStore,
-  chatStore,
-);
+const moderationService = pool && authStore && marketplaceStore && chatStore
+  ? new ModerationService(
+      new PostgresModerationStore(pool),
+      authStore,
+      marketplaceStore,
+      chatStore,
+    )
+  : null;
+
 const app = createApp({
   config,
   authStore,
@@ -66,10 +87,18 @@ const app = createApp({
   notifier,
 });
 
-// ⚠️ ЭТА СТРОКА БЫЛА ПРОПУЩЕНА!
 const server = createServer(app);
-createChatRealtimeServer({ server, service: chatService, config });
+
+if (chatService) {
+  createChatRealtimeServer({ server, service: chatService, config });
+}
 
 server.listen(config.port, config.host, () => {
   console.log(`API listening on http://${config.host}:${config.port}`);
+  if (!dbAvailable) {
+    console.log("  Mode: Degraded (no database)");
+  }
+  if (!paymentService) {
+    console.log("  Stripe: Disabled");
+  }
 });
