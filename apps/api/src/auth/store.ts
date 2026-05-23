@@ -1,6 +1,7 @@
 import type {
   EmailOutboxRecord,
   EmailVerificationTokenRecord,
+  PasswordResetTokenRecord,
   RefreshSessionRecord,
   UserRecord,
   UserRole,
@@ -12,9 +13,17 @@ export type CreateUserInput = {
   email: string;
   passwordHash: string;
   role: UserRole;
+  dateOfBirth: Date | null;
 };
 
 export type CreateVerificationTokenInput = {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  expiresAt: Date;
+};
+
+export type CreatePasswordResetTokenInput = {
   id: string;
   userId: string;
   tokenHash: string;
@@ -37,6 +46,12 @@ export type CreateEmailOutboxInput = {
   token: string;
 };
 
+export type ParentalConsentInput = {
+  userId: string;
+  parentEmail: string;
+  grantedAt: Date;
+};
+
 export type AuthStore = {
   createUser(input: CreateUserInput): Promise<UserRecord>;
   findUserByEmail(email: string): Promise<UserRecord | null>;
@@ -50,6 +65,9 @@ export type AuthStore = {
   updateUserEmailVerified(userId: string, verifiedAt: Date): Promise<UserRecord>;
   updateUserRole(userId: string, role: UserRole): Promise<UserRecord>;
   updateUserStatus(userId: string, status: UserStatus): Promise<UserRecord>;
+  updateUserPasswordHash(userId: string, passwordHash: string): Promise<UserRecord>;
+  setParentalConsent(input: ParentalConsentInput): Promise<UserRecord>;
+  deleteUser(userId: string): Promise<void>;
   createVerificationToken(
     input: CreateVerificationTokenInput
   ): Promise<EmailVerificationTokenRecord>;
@@ -57,6 +75,13 @@ export type AuthStore = {
     tokenHash: string
   ): Promise<EmailVerificationTokenRecord | null>;
   consumeVerificationToken(id: string, consumedAt: Date): Promise<void>;
+  createPasswordResetToken(
+    input: CreatePasswordResetTokenInput
+  ): Promise<PasswordResetTokenRecord>;
+  findPasswordResetTokenByHash(
+    tokenHash: string
+  ): Promise<PasswordResetTokenRecord | null>;
+  consumePasswordResetToken(id: string, consumedAt: Date): Promise<void>;
   createRefreshSession(input: CreateRefreshSessionInput): Promise<RefreshSessionRecord>;
   findRefreshSessionById(id: string): Promise<RefreshSessionRecord | null>;
   rotateRefreshSession(input: {

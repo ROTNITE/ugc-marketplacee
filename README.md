@@ -1,13 +1,13 @@
-<<<<<<< HEAD
 # UGC Marketplace
 
-Infrastructure scaffold for a bilingual UGC influencer marketplace.
+Infrastructure scaffold for a bilingual UGC influencer marketplace (RU/EN) connecting
+brands with micro-influencers in the CIS region.
 
 ## Requirements
 
 - Node.js 22+
 - npm 10+
-- Docker Desktop, optional for containerized local startup
+- Docker Desktop (optional, for containerized local startup)
 
 ## Install
 
@@ -72,6 +72,8 @@ npm run build
 ```
 
 The CI workflow runs the same baseline checks with `npm run ci`.
-=======
-# ugc-marketplacee
->>>>>>> 5fd82d0ec74b7b5e5bc744514ff375530cf9e70b
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development workflow, commit
+conventions, and review expectations.

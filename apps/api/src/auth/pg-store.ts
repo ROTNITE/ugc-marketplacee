@@ -2,13 +2,16 @@ import pg from "pg";
 import type {
   AuthStore,
   CreateEmailOutboxInput,
+  CreatePasswordResetTokenInput,
   CreateRefreshSessionInput,
   CreateUserInput,
-  CreateVerificationTokenInput
+  CreateVerificationTokenInput,
+  ParentalConsentInput
 } from "./store.js";
 import type {
   EmailOutboxRecord,
   EmailVerificationTokenRecord,
+  PasswordResetTokenRecord,
   RefreshSessionRecord,
   UserRecord,
   UserRole,
@@ -22,6 +25,9 @@ type UserRow = {
   email_verified_at: Date | null;
   role: UserRole;
   status: UserStatus;
+  date_of_birth: Date | null;
+  parental_consent_granted_at: Date | null;
+  parental_consent_email: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -46,6 +52,8 @@ type VerificationTokenRow = {
   created_at: Date;
 };
 
+type PasswordResetTokenRow = VerificationTokenRow;
+
 type EmailOutboxRow = {
   id: string;
   user_id: string;
@@ -62,11 +70,11 @@ export class PgAuthStore implements AuthStore {
   async createUser(input: CreateUserInput): Promise<UserRecord> {
     const result = await this.pool.query<UserRow>(
       `
-        INSERT INTO users (id, email, password_hash, role)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO users (id, email, password_hash, role, date_of_birth)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *
       `,
-      [input.id, input.email, input.passwordHash, input.role]
+      [input.id, input.email, input.passwordHash, input.role, input.dateOfBirth]
     );
 
     return mapUser(result.rows[0]);
@@ -149,6 +157,41 @@ export class PgAuthStore implements AuthStore {
     return mapUser(result.rows[0]);
   }
 
+  async updateUserPasswordHash(
+    userId: string,
+    passwordHash: string
+  ): Promise<UserRecord> {
+    const result = await this.pool.query<UserRow>(
+      `
+        UPDATE users
+        SET password_hash = $2, updated_at = now()
+        WHERE id = $1
+        RETURNING *
+      `,
+      [userId, passwordHash]
+    );
+    return mapUser(result.rows[0]);
+  }
+
+  async setParentalConsent(input: ParentalConsentInput): Promise<UserRecord> {
+    const result = await this.pool.query<UserRow>(
+      `
+        UPDATE users
+        SET parental_consent_granted_at = $2,
+            parental_consent_email = $3,
+            updated_at = now()
+        WHERE id = $1
+        RETURNING *
+      `,
+      [input.userId, input.grantedAt, input.parentEmail]
+    );
+    return mapUser(result.rows[0]);
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    await this.pool.query("DELETE FROM users WHERE id = $1", [userId]);
+  }
+
   async createVerificationToken(
     input: CreateVerificationTokenInput
   ): Promise<EmailVerificationTokenRecord> {
@@ -177,6 +220,37 @@ export class PgAuthStore implements AuthStore {
   async consumeVerificationToken(id: string, consumedAt: Date): Promise<void> {
     await this.pool.query(
       "UPDATE email_verification_tokens SET consumed_at = $2 WHERE id = $1",
+      [id, consumedAt]
+    );
+  }
+
+  async createPasswordResetToken(
+    input: CreatePasswordResetTokenInput
+  ): Promise<PasswordResetTokenRecord> {
+    const result = await this.pool.query<PasswordResetTokenRow>(
+      `
+        INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at)
+        VALUES ($1, $2, $3, $4)
+        RETURNING *
+      `,
+      [input.id, input.userId, input.tokenHash, input.expiresAt]
+    );
+    return mapVerificationToken(result.rows[0]);
+  }
+
+  async findPasswordResetTokenByHash(
+    tokenHash: string
+  ): Promise<PasswordResetTokenRecord | null> {
+    const result = await this.pool.query<PasswordResetTokenRow>(
+      "SELECT * FROM password_reset_tokens WHERE token_hash = $1",
+      [tokenHash]
+    );
+    return result.rows[0] ? mapVerificationToken(result.rows[0]) : null;
+  }
+
+  async consumePasswordResetToken(id: string, consumedAt: Date): Promise<void> {
+    await this.pool.query(
+      "UPDATE password_reset_tokens SET consumed_at = $2 WHERE id = $1",
       [id, consumedAt]
     );
   }
@@ -298,6 +372,9 @@ function mapUser(row: UserRow | undefined): UserRecord {
     emailVerifiedAt: row.email_verified_at,
     role: row.role,
     status: row.status,
+    dateOfBirth: row.date_of_birth,
+    parentalConsentGrantedAt: row.parental_consent_granted_at,
+    parentalConsentEmail: row.parental_consent_email,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };

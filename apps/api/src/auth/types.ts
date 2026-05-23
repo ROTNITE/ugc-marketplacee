@@ -9,6 +9,9 @@ export type UserRecord = {
   emailVerifiedAt: Date | null;
   role: UserRole;
   status: UserStatus;
+  dateOfBirth: Date | null;
+  parentalConsentGrantedAt: Date | null;
+  parentalConsentEmail: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -19,6 +22,8 @@ export type PublicUser = {
   emailVerified: boolean;
   role: UserRole;
   status: UserStatus;
+  isMinor: boolean;
+  parentalConsentGranted: boolean;
 };
 
 export type RefreshSessionRecord = {
@@ -33,6 +38,15 @@ export type RefreshSessionRecord = {
 };
 
 export type EmailVerificationTokenRecord = {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  expiresAt: Date;
+  consumedAt: Date | null;
+  createdAt: Date;
+};
+
+export type PasswordResetTokenRecord = {
   id: string;
   userId: string;
   tokenHash: string;
@@ -62,13 +76,57 @@ export type AuthResult = {
   refreshToken: string;
 };
 
-export function toPublicUser(user: UserRecord): PublicUser {
+/**
+ * Minimum age (in years) at which a user is treated as an adult and does not
+ * need parental consent for payments or direct messaging. Driven by COPPA-like
+ * rules and the Russian Federal Law 152-FZ on personal data.
+ */
+export const ADULT_AGE_YEARS = 18;
+
+export function calculateAgeYears(dateOfBirth: Date, now: Date = new Date()): number {
+  let age = now.getUTCFullYear() - dateOfBirth.getUTCFullYear();
+  const monthDiff = now.getUTCMonth() - dateOfBirth.getUTCMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getUTCDate() < dateOfBirth.getUTCDate())) {
+    age -= 1;
+  }
+  return age;
+}
+
+export function isMinor(user: UserRecord, now: Date = new Date()): boolean {
+  if (!user.dateOfBirth) {
+    return false;
+  }
+  return calculateAgeYears(user.dateOfBirth, now) < ADULT_AGE_YEARS;
+}
+
+export function hasParentalConsent(user: UserRecord): boolean {
+  return user.parentalConsentGrantedAt !== null;
+}
+
+/**
+ * Returns true when the user is allowed to perform "adult" actions
+ * (payments, direct messaging). Adults are always allowed; minors only if
+ * parental consent has been granted.
+ */
+export function canPerformAdultActions(
+  user: UserRecord,
+  now: Date = new Date()
+): boolean {
+  if (!isMinor(user, now)) {
+    return true;
+  }
+  return hasParentalConsent(user);
+}
+
+export function toPublicUser(user: UserRecord, now: Date = new Date()): PublicUser {
   return {
     id: user.id,
     email: user.email,
     emailVerified: user.emailVerifiedAt !== null,
     role: user.role,
-    status: user.status
+    status: user.status,
+    isMinor: isMinor(user, now),
+    parentalConsentGranted: hasParentalConsent(user)
   };
 }
 

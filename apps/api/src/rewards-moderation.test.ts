@@ -491,14 +491,17 @@ async function createUser(role: UserRole): Promise<{ user: PublicUser; token: st
     email: `${role}-${randomUUID()}@example.com`,
     emailVerified: true,
     role,
-    status: "active"
+    status: "active",
+    isMinor: false,
+    parentalConsentGranted: true
   } satisfies PublicUser;
 
   await authStore.createUser({
     id: user.id,
     email: user.email,
     passwordHash: "unused",
-    role
+    role,
+    dateOfBirth: null
   });
   await authStore.updateUserEmailVerified(user.id, new Date());
 

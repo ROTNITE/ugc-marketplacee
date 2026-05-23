@@ -2,6 +2,7 @@ import type { Router } from "express";
 import { Router as createRouter } from "express";
 import type { ApiConfig } from "../config.js";
 import { requireAuth } from "../auth/middleware.js";
+import { requireAdultActions } from "../auth/adult-actions.js";
 import type { AuthStore } from "../auth/store.js";
 import type { ChatService } from "./service.js";
 
@@ -12,6 +13,7 @@ export function createChatRouter(
 ): Router {
   const router = createRouter();
   const protectedRoute = requireAuth(config, authStore);
+  const adultActions = authStore ? requireAdultActions(authStore) : null;
 
   router.get("/chat/threads", protectedRoute, async (request, response, next) => {
     try {
@@ -53,6 +55,7 @@ export function createChatRouter(
   router.post(
     "/chat/threads/:threadId/messages",
     protectedRoute,
+    ...(adultActions ? [adultActions] : []),
     async (request, response, next) => {
       try {
         response
