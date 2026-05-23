@@ -1,0 +1,34 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 22a9309..4261bb8 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -10,6 +10,29 @@ on:
+ jobs:
+   verify:
+     runs-on: ubuntu-latest
++
++    services:
++      postgres:
++        image: postgres:16-alpine
++        env:
++          POSTGRES_DB: ugc_marketplace
++          POSTGRES_USER: ugc
++          POSTGRES_PASSWORD: ugc
++        ports:
++          - 5432:5432
++        options: >-
++          --health-cmd "pg_isready -U ugc -d ugc_marketplace"
++          --health-interval 5s
++          --health-timeout 5s
++          --health-retries 10
++
++    env:
++      # Make the API tests Postgres-aware in case any are added that need it.
++      DATABASE_URL: postgresql://ugc:ugc@localhost:5432/ugc_marketplace
++      JWT_SECRET: ci-secret-do-not-use-in-production
++      WEB_APP_URL: http://localhost:3000
++      WEB_ORIGIN: http://localhost:3000
++
+     steps:
+       - name: Checkout
+         uses: actions/checkout@v4
