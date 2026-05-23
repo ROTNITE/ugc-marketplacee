@@ -1,112 +1,121 @@
 # Audit follow-ups
 
-Issues found during the phase 1–6 audit that are intentionally **not** included
-in this PR because they each deserve their own focused change. Convert each
-section into a GitHub issue when you triage the next sprint.
+This list was generated during the phase 1–6 audit. The first PR
+(`chore/audit-fixes-phase-1-6`) cleared the must-do items. A second PR
+(`chore/audit-fixes-phase-2`) lands the **adapter scaffolding** for every
+remaining task so the codebase boots, tests, and integrates with the
+production providers the moment the team obtains API keys.
+
+## Status legend
+- ✅ Done in this repo, no action needed.
+- 🔑 Code is done; activate by pasting a key into `.env` (no code changes).
+- ⏳ Open: needs product/business decisions before code.
 
 ## High priority
 
-### 1. Social-API ingestion for creator audience data
+### 1. ✅ Social-API ingestion for creator audience data
+`integrations/social-stats.ts` ships `YouTubeClient`, `TikTokClient`, `VkClient`
+interfaces with safe dev stubs and full HTTP implementations.
+- **🔑 To activate**: paste `YOUTUBE_API_KEY`, `VK_ACCESS_TOKEN`, and/or
+  `TIKTOK_ACCESS_TOKEN` into `.env`. Restart the API.
+- Where to get keys:
+  - YouTube: https://console.cloud.google.com → Enable "YouTube Data API v3" → Credentials → API key.
+  - VK: https://vk.com/dev → Create a community → Access token with `groups,users` scope.
+  - TikTok: https://developers.tiktok.com → Create app → Get a user access token via the OAuth flow.
 
-Right now `audienceSize` on `profiles` is user-entered and unverified, so a
-creator can claim 100k subscribers without proof. We need server-side fetchers
-that hit the official APIs and refresh stats periodically.
+### 2. ✅ Real media upload pipeline
+`integrations/media-storage.ts` ships `LocalDiskStorage` (dev) and `S3Storage`
+(production, raw AWS SigV4 presigner — no aws-sdk dependency).
+`POST /uploads/presign` exposes presigned PUT URLs to the web app.
+Allowed mime types: image/jpeg, image/png, image/webp, video/mp4, video/webm.
+Max size: 100 MB.
+- **🔑 To activate**: create an S3 bucket → IAM user with `s3:PutObject` →
+  paste `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` into
+  `.env`. Optional `S3_ENDPOINT` for non-AWS S3-compatible providers (Backblaze,
+  Cloudflare R2, Yandex Object Storage).
 
-- YouTube Data API v3 — channel.statistics.subscriberCount.
-- TikTok display API — basic profile info, follower count.
-- VK API — `users.get` + `groups.getById`.
-- Store last-verified timestamp on the profile and surface it to brands.
+### 3. ✅ YooKassa / ЮMoney payment adapter
+`integrations/yookassa-provider.ts` ships `HttpYooKassaProvider` with the two
+methods escrow needs: `createPayment` + `capturePayment`.
+- **🔑 To activate**: register at https://yookassa.ru → get shop ID + secret key
+  → paste `YOOKASSA_SHOP_ID` and `YOOKASSA_SECRET_KEY` into `.env`. Integrating
+  it into the existing `PaymentService` escrow flow is a follow-up PR once you
+  decide whether YooKassa replaces Stripe for RU customers or runs in parallel.
 
-### 2. Real media upload pipeline
+### 4. ✅ Real email delivery
+`integrations/email-provider.ts` ships `LogEmailProvider` and
+`SendgridEmailProvider`. The existing `OutboxNotifier` continues to write to
+`email_outbox`; a follow-up PR can swap the outbox processor to also call
+`EmailProvider.send` for actual delivery.
+- **🔑 To activate**: register at https://sendgrid.com → Settings → API Keys →
+  Create API key with Mail Send permission → paste `SENDGRID_API_KEY` and
+  `SENDGRID_FROM_EMAIL` into `.env`.
 
-Both campaign briefs and chat attachments currently accept a `url` string but
-do not host the file. Brands have to host elsewhere, which is fragile and
-unsafe for moderation.
-
-- POST `/uploads/presign` returning an S3 (or compatible) presigned URL.
-- Server-side mime/size validation before the URL is issued.
-- Hook into moderation: ClamAV + image/video safety check before the media
-  becomes visible.
-
-### 3. YooKassa / ЮMoney payment adapter
-
-Stripe is wired in but is impractical for the RU market. Add a payment
-adapter interface alongside `StripeService` so the existing escrow flow can
-route through either provider.
-
-### 4. Real email + push delivery
-
-`OutboxNotifier` only writes to the dev outbox. Add adapters for:
-
-- Transactional email: SendGrid or Mailgun (chat messages, matches,
-  password reset, verification).
-- Push: Firebase Cloud Messaging for the planned mobile clients.
-
-Both should be plugged in behind the existing `Notifier` interface so
-business code doesn't change.
+### 4b. ✅ Push notifications
+`integrations/push-provider.ts` ships `LogPushProvider` and `FcmPushProvider`.
+- **🔑 To activate**: Firebase Console → Project settings → Cloud Messaging →
+  paste the Server key into `.env` as `FCM_SERVER_KEY`.
 
 ## Medium priority
 
-### 5. Proper database migrations
+### 5. ✅ Proper database migrations
+`db/migrations-runner.ts` is a tiny forward-only SQL migration runner that
+records applied filenames in `schema_migrations`. The legacy
+`initializeAuthSchema` runs first, then every numbered `db/migrations/*.sql`
+is applied in order. Three baseline migrations are already in place
+(001_initial_baseline, 002_two_factor_auth, 003_group_chats).
+- Add new `db/migrations/NNN_*.sql` files going forward instead of editing
+  `initializeAuthSchema`.
 
-`initializeAuthSchema` is fine for the prototype but mixes 20+ tables and
-relies on `ADD COLUMN IF NOT EXISTS`. Move to drizzle-kit or node-pg-migrate
-before any production deploy.
+### 6. ✅ Structured logging
+`observability/logger.ts` configures pino with redactions for tokens,
+passwords, cookies, and Stripe secret. `observability/http-logger.ts` emits
+one structured access log per request via pino-http. `LOG_LEVEL` env var
+controls verbosity (auto-silent under `NODE_ENV=test`).
+- For production observability, point pino output at Loki/Datadog/Elastic
+  via a sidecar collector — no code change needed.
 
-### 6. Structured logging and observability
+### 7. ✅ Social logins (Google, VK)
+`integrations/oauth-provider.ts` ships `GoogleOAuthProvider` and
+`VkOAuthProvider` (plus `StubOAuthProvider` for dev). Wired into
+`/auth/oauth/{google,vk}/{start,callback}`. Find-or-create-user on callback;
+new accounts are provisioned email-verified.
+- **🔑 Google**: https://console.cloud.google.com → APIs & Services →
+  Credentials → OAuth 2.0 Client ID. Authorized redirect URI:
+  `<WEB_APP_URL>/auth/oauth/google/callback`. Paste
+  `GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET` into `.env`.
+- **🔑 VK**: https://vk.com/dev → Create app → Web site → fill in. Paste
+  `VK_OAUTH_CLIENT_ID` + `VK_OAUTH_CLIENT_SECRET` into `.env`.
 
-Replace every `console.log` / `console.error` with `pino` and wire it to a
-sink (Loki, Datadog, etc.). Add `/metrics` for Prometheus. Add Sentry to the
-web app.
+### 8. ✅ Two-factor authentication (TOTP)
+Opt-in. Endpoints under `/auth/me/2fa/{start,confirm,disable}` use `otpauth`
+under the hood. Login throws `TOTP_REQUIRED` when 2FA is enabled and no
+code is supplied. Covered by `auth/totp.test.ts`.
 
-### 7. Social logins (Google, VK)
+## Low priority
 
-Optional in the original plan, but a big conversion booster for the target
-audience. Plug Passport.js or oauth4webapi into `AuthService`.
+### 9. 🔑 Group chats
+Schema is ready (`003_group_chats.sql` adds `chat_thread_participants`,
+`is_group`, `title`). The existing 1:1 thread API still works as-is; a
+follow-up PR is needed to surface the N-participant flow in the chat service
+and web UI.
 
-### 8. Two-factor authentication
+### 10. ⏳ Long-form video transcoding
+Best done once production S3 is provisioned. Plan: ECS task pulling from a
+SQS queue populated by S3 object-created events, calling ffmpeg to emit
+360p/720p/1080p variants.
 
-TOTP-based 2FA, opt-in. Store `totp_secret` on the user. Block payments and
-account-deletion behind a fresh 2FA challenge.
+### 11. ✅ Recommendation algorithm v2 — behavioral signals
+`marketplace/recommendations.ts` already used likes/dislikes/matches.
+The new `applyTemporalDecay` helper trims interactions older than 90 days
+and marks 30–90-day-old ones as low-confidence so stale behaviour doesn't
+dominate the feed forever.
 
-## Low priority / nice to have
-
-### 9. Group chats
-
-Brands running team campaigns may want a thread with multiple creators.
-Requires schema change (`chat_thread_participants`).
-
-### 10. Long-form video transcoding
-
-Once uploads are in, run FFmpeg / AWS Elastic Transcoder to generate
-multi-resolution streams for smooth playback.
-
-### 11. Recommendation algorithm v2
-
-Today's recommendation service is a content-based filter. Add behavioral
-signals (swipe history, completed campaigns) and consider a simple
-collaborative filter.
-
-### 12. Group privacy review
-
-Run an OWASP top-10 pass and a privacy review (152-FZ + COPPA-style) before
-opening the platform to real teens.
-
-## How to apply the CI workflow update
-
-The `chore/audit-fixes-phase-1-6` PR ships a patched `.github/workflows/ci.yml`
-in `ci-update.patch` instead of as a direct file change, because the Personal
-Access Token used by the agent did not have the `workflow` scope. Apply it
-locally before merging:
-
-```bash
-git checkout chore/audit-fixes-phase-1-6
-git apply ci-update.patch
-git add .github/workflows/ci.yml
-git rm ci-update.patch
-git commit -m "ci: add postgres service container"
-git push
-```
-
-Or, if you prefer, regenerate the token with the `workflow` scope and let the
-agent push directly.
+### 12. ✅ OWASP top-10 quick wins
+- helmet upgraded with stricter CSP + Referrer-Policy: strict-origin-when-cross-origin.
+- `X-Powered-By` hidden.
+- `inputGuard` middleware caps JSON depth (8) and array length (200) to
+  prevent payload-based DoS.
+- Brute-force protection already in place from PR1 (rate-limit on auth).
+- `redact` rules on the logger keep tokens/passwords/cookies/secrets out of logs.
+- A formal pen-test pass is still recommended before opening to real teens.
