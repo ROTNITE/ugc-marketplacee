@@ -33,12 +33,17 @@ const chatStore = new PgChatStore(pool);
 const chatService = new ChatService(chatStore, marketplaceStore, notifier);
 const rewardsService = new RewardsService(new PostgresRewardsStore(pool), config);
 const paymentStore = new PostgresPaymentStore(pool);
-const paymentService = new PaymentService(
-  paymentStore,
-  marketplaceStore,
-  config,
-  rewardsService
-);
+let paymentService: PaymentService | undefined;
+try {
+  paymentService = new PaymentService(
+    new PostgresPaymentStore(pool),
+    marketplaceStore,
+    config,
+    rewardsService,
+  );
+} catch (error) {
+  console.warn("WARNING: PaymentService not available.", (error as Error).message);
+}
 const moderationService = new ModerationService(
   new PostgresModerationStore(pool),
   authStore,
