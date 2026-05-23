@@ -65,6 +65,8 @@ const app = createApp({
   moderationService,
   notifier,
 });
+
+const server = createServer(app);
 createChatRealtimeServer({ server, service: chatService, config });
 
 server.listen(config.port, config.host, () => {
