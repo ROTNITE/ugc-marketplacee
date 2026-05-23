@@ -28,24 +28,32 @@ try {
     (error as Error).message,
   );
 }
+
 const authStore = new PgAuthStore(pool);
 const notifier = new OutboxNotifier(authStore);
 const marketplaceStore = new PgMarketplaceStore(pool);
 const chatStore = new PgChatStore(pool);
 const chatService = new ChatService(chatStore, marketplaceStore, notifier);
 const rewardsService = new RewardsService(new PostgresRewardsStore(pool), config);
-const paymentStore = new PostgresPaymentStore(pool);
-const paymentService = new PaymentService(
-  paymentStore,
-  marketplaceStore,
-  config,
-  rewardsService
-);
+
+// PaymentService needs Stripe — gracefully skip if not configured
+let paymentService: PaymentService | undefined;
+try {
+  paymentService = new PaymentService(
+    new PostgresPaymentStore(pool),
+    marketplaceStore,
+    config,
+    rewardsService,
+  );
+} catch (error) {
+  console.warn("WARNING: PaymentService not available.", (error as Error).message);
+}
+
 const moderationService = new ModerationService(
   new PostgresModerationStore(pool),
   authStore,
   marketplaceStore,
-  chatStore
+  chatStore,
 );
 const app = createApp({
   config,
@@ -55,9 +63,8 @@ const app = createApp({
   paymentService,
   rewardsService,
   moderationService,
-  notifier
+  notifier,
 });
-const server = createServer(app);
 createChatRealtimeServer({ server, service: chatService, config });
 
 server.listen(config.port, config.host, () => {
