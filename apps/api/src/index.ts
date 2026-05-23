@@ -17,7 +17,17 @@ import { OutboxNotifier } from "./notifications/notifier.js";
 
 const config = loadConfig();
 const pool = createPool(config);
-await initializeAuthSchema(pool);
+
+// Gracefully handle missing database — log warning instead of crashing.
+// Useful for CI, v0.dev preview, and local dev without PostgreSQL.
+try {
+  await initializeAuthSchema(pool);
+} catch (error) {
+  console.warn(
+    "WARNING: Could not connect to database. The API will not serve DB-backed routes.",
+    (error as Error).message,
+  );
+}
 const authStore = new PgAuthStore(pool);
 const notifier = new OutboxNotifier(authStore);
 const marketplaceStore = new PgMarketplaceStore(pool);
