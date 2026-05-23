@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ApiConfig } from "../config.js";
 import { AuthError, authErrors } from "./errors.js";
+import { buildTotpUri, generateTotpSecret, verifyTotp } from "./totp.js";
 import {
   createOpaqueToken,
   createSessionTokenParts,
@@ -31,6 +32,7 @@ export type RegisterInput = {
 export type LoginInput = {
   email: unknown;
   password: unknown;
+  totp?: unknown;
 };
 
 export type VerifyEmailInput = {
@@ -56,6 +58,18 @@ export type ResetPasswordInput = {
 
 export type ParentalConsentRequestInput = {
   parentEmail: unknown;
+};
+
+export type TotpEnableInput = {
+  code: unknown;
+};
+
+export type TotpDisableInput = {
+  code: unknown;
+};
+
+export type TotpChallengeInput = {
+  code: unknown;
 };
 
 export type UserDataExport = {
@@ -268,9 +282,64 @@ export class AuthService {
     if (!user.emailVerifiedAt) {
       throw authErrors.emailNotVerified();
     }
+    if (user.totpEnabledAt && user.totpSecret) {
+      if (typeof input.totp !== "string" || !verifyTotp(user.totpSecret, input.totp)) {
+        throw new AuthError(
+          "TOTP_REQUIRED",
+          "Two-factor authentication code is required.",
+          401
+        );
+      }
+    }
     user = await this.ensureAdminRole(user);
 
     return this.createAuthResult(user);
+  }
+
+  async startTotpEnrollment(
+    userId: string
+  ): Promise<{ secret: string; otpauthUri: string }> {
+    const user = await this.store.findUserById(userId);
+    if (!user) throw authErrors.userNotFound();
+    if (user.totpEnabledAt) {
+      throw new AuthError("TOTP_ALREADY_ENABLED", "2FA already enabled.", 409);
+    }
+    const secret = generateTotpSecret();
+    await this.store.setTotpSecret(userId, secret, null);
+    return { secret, otpauthUri: buildTotpUri(user.email, secret) };
+  }
+
+  async confirmTotpEnrollment(
+    userId: string,
+    input: TotpEnableInput,
+    now = new Date()
+  ): Promise<{ user: PublicUser }> {
+    if (typeof input.code !== "string") throw authErrors.invalidPayload();
+    const user = await this.store.findUserById(userId);
+    if (!user || !user.totpSecret) throw authErrors.invalidPayload();
+    if (!verifyTotp(user.totpSecret, input.code)) {
+      throw authErrors.invalidCredentials();
+    }
+    const updated = await this.store.setTotpSecret(userId, user.totpSecret, now);
+    return { user: toPublicUser(updated, now) };
+  }
+
+  async disableTotp(
+    userId: string,
+    input: TotpDisableInput,
+    now = new Date()
+  ): Promise<{ user: PublicUser }> {
+    if (typeof input.code !== "string") throw authErrors.invalidPayload();
+    const user = await this.store.findUserById(userId);
+    if (!user) throw authErrors.userNotFound();
+    if (!user.totpEnabledAt || !user.totpSecret) {
+      throw new AuthError("TOTP_NOT_ENABLED", "2FA is not enabled.", 409);
+    }
+    if (!verifyTotp(user.totpSecret, input.code)) {
+      throw authErrors.invalidCredentials();
+    }
+    const updated = await this.store.setTotpSecret(userId, null, null);
+    return { user: toPublicUser(updated, now) };
   }
 
   async refresh(refreshToken: string | undefined, now = new Date()): Promise<AuthResult> {

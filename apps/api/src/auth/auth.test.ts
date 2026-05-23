@@ -225,7 +225,8 @@ test("protected routes reject missing and expired access tokens", async () => {
       role: "creator",
       status: "active",
       isMinor: false,
-      parentalConsentGranted: true
+      parentalConsentGranted: true,
+      totpEnabled: false
     } satisfies PublicUser,
     { jwtSecret: config.jwtSecret, accessTokenTtlSeconds: -1 }
   );

@@ -28,6 +28,8 @@ type UserRow = {
   date_of_birth: Date | null;
   parental_consent_granted_at: Date | null;
   parental_consent_email: string | null;
+  totp_secret: string | null;
+  totp_enabled_at: Date | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -184,6 +186,23 @@ export class PgAuthStore implements AuthStore {
         RETURNING *
       `,
       [input.userId, input.grantedAt, input.parentEmail]
+    );
+    return mapUser(result.rows[0]);
+  }
+
+  async setTotpSecret(
+    userId: string,
+    secret: string | null,
+    enabledAt: Date | null
+  ): Promise<UserRecord> {
+    const result = await this.pool.query<UserRow>(
+      `
+        UPDATE users
+        SET totp_secret = $2, totp_enabled_at = $3, updated_at = now()
+        WHERE id = $1
+        RETURNING *
+      `,
+      [userId, secret, enabledAt]
     );
     return mapUser(result.rows[0]);
   }
@@ -375,6 +394,8 @@ function mapUser(row: UserRow | undefined): UserRecord {
     dateOfBirth: row.date_of_birth,
     parentalConsentGrantedAt: row.parental_consent_granted_at,
     parentalConsentEmail: row.parental_consent_email,
+    totpSecret: row.totp_secret,
+    totpEnabledAt: row.totp_enabled_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };

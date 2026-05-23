@@ -68,6 +68,11 @@ export type AuthStore = {
   updateUserPasswordHash(userId: string, passwordHash: string): Promise<UserRecord>;
   setParentalConsent(input: ParentalConsentInput): Promise<UserRecord>;
   deleteUser(userId: string): Promise<void>;
+  setTotpSecret(
+    userId: string,
+    secret: string | null,
+    enabledAt: Date | null
+  ): Promise<UserRecord>;
   createVerificationToken(
     input: CreateVerificationTokenInput
   ): Promise<EmailVerificationTokenRecord>;

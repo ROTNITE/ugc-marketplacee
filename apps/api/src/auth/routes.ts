@@ -147,6 +147,32 @@ export function createAuthRouter(
     }
   });
 
+  router.post("/me/2fa/start", protectedRoute, async (request, response, next) => {
+    try {
+      response.json(await service.startTotpEnrollment(request.auth?.sub ?? ""));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/me/2fa/confirm", protectedRoute, async (request, response, next) => {
+    try {
+      response.json(
+        await service.confirmTotpEnrollment(request.auth?.sub ?? "", request.body)
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/me/2fa/disable", protectedRoute, async (request, response, next) => {
+    try {
+      response.json(await service.disableTotp(request.auth?.sub ?? "", request.body));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.delete("/me", protectedRoute, async (request, response, next) => {
     try {
       await service.deleteAccount(request.auth?.sub ?? "");

@@ -36,6 +36,8 @@ export class MemoryAuthStore implements AuthStore {
       dateOfBirth: input.dateOfBirth,
       parentalConsentGrantedAt: null,
       parentalConsentEmail: null,
+      totpSecret: null,
+      totpEnabledAt: null,
       createdAt: now,
       updatedAt: now
     };
@@ -114,6 +116,22 @@ export class MemoryAuthStore implements AuthStore {
       updatedAt: input.grantedAt
     };
     this.users.set(input.userId, next);
+    return next;
+  }
+
+  async setTotpSecret(
+    userId: string,
+    secret: string | null,
+    enabledAt: Date | null
+  ): Promise<UserRecord> {
+    const user = this.requireUser(userId);
+    const next = {
+      ...user,
+      totpSecret: secret,
+      totpEnabledAt: enabledAt,
+      updatedAt: new Date()
+    };
+    this.users.set(userId, next);
     return next;
   }
 

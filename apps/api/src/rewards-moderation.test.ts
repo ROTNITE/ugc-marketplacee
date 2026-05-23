@@ -493,7 +493,8 @@ async function createUser(role: UserRole): Promise<{ user: PublicUser; token: st
     role,
     status: "active",
     isMinor: false,
-    parentalConsentGranted: true
+    parentalConsentGranted: true,
+    totpEnabled: false
   } satisfies PublicUser;
 
   await authStore.createUser({

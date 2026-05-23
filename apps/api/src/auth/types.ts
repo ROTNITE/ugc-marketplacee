@@ -12,6 +12,8 @@ export type UserRecord = {
   dateOfBirth: Date | null;
   parentalConsentGrantedAt: Date | null;
   parentalConsentEmail: string | null;
+  totpSecret: string | null;
+  totpEnabledAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -24,6 +26,7 @@ export type PublicUser = {
   status: UserStatus;
   isMinor: boolean;
   parentalConsentGranted: boolean;
+  totpEnabled: boolean;
 };
 
 export type RefreshSessionRecord = {
@@ -126,7 +129,8 @@ export function toPublicUser(user: UserRecord, now: Date = new Date()): PublicUs
     role: user.role,
     status: user.status,
     isMinor: isMinor(user, now),
-    parentalConsentGranted: hasParentalConsent(user)
+    parentalConsentGranted: hasParentalConsent(user),
+    totpEnabled: user.totpEnabledAt !== null
   };
 }
 
