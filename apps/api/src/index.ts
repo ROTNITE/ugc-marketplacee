@@ -66,6 +66,7 @@ const app = createApp({
   notifier,
 });
 
+// ⚠️ ЭТА СТРОКА БЫЛА ПРОПУЩЕНА!
 const server = createServer(app);
 createChatRealtimeServer({ server, service: chatService, config });
 
