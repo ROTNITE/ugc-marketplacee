@@ -18,6 +18,7 @@ import { createRewardsRouter } from "./rewards/routes.js";
 import type { RewardsService } from "./rewards/service.js";
 import { createModerationRouter } from "./moderation/routes.js";
 import type { ModerationService } from "./moderation/service.js";
+import type { Notifier } from "./notifications/notifier.js";
 
 export function createApp(options: {
   config: ReturnType<typeof loadConfig>;
@@ -27,6 +28,7 @@ export function createApp(options: {
   paymentService?: PaymentService;
   rewardsService?: RewardsService;
   moderationService?: ModerationService;
+  notifier?: Notifier;
 }) {
   const app = express();
   const authService = new AuthService(
@@ -38,7 +40,8 @@ export function createApp(options: {
     ? new MarketplaceService(
         options.marketplaceStore,
         options.config,
-        options.rewardsService
+        options.rewardsService,
+        options.notifier
       )
     : null;
 

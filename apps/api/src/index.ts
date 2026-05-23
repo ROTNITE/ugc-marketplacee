@@ -13,14 +13,16 @@ import { PostgresRewardsStore } from "./rewards/store.js";
 import { RewardsService } from "./rewards/service.js";
 import { PostgresModerationStore } from "./moderation/store.js";
 import { ModerationService } from "./moderation/service.js";
+import { OutboxNotifier } from "./notifications/notifier.js";
 
 const config = loadConfig();
 const pool = createPool(config);
 await initializeAuthSchema(pool);
 const authStore = new PgAuthStore(pool);
+const notifier = new OutboxNotifier(authStore);
 const marketplaceStore = new PgMarketplaceStore(pool);
 const chatStore = new PgChatStore(pool);
-const chatService = new ChatService(chatStore, marketplaceStore);
+const chatService = new ChatService(chatStore, marketplaceStore, notifier);
 const rewardsService = new RewardsService(new PostgresRewardsStore(pool), config);
 const paymentStore = new PostgresPaymentStore(pool);
 const paymentService = new PaymentService(
@@ -42,7 +44,8 @@ const app = createApp({
   marketplaceStore,
   paymentService,
   rewardsService,
-  moderationService
+  moderationService,
+  notifier
 });
 const server = createServer(app);
 createChatRealtimeServer({ server, service: chatService, config });

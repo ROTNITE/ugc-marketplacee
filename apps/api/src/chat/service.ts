@@ -3,6 +3,8 @@ import { AuthError, authErrors } from "../auth/errors.js";
 import type { AccessTokenClaims } from "../auth/security.js";
 import type { MarketplaceStore } from "../marketplace/store.js";
 import type { MatchRecord } from "../marketplace/types.js";
+import type { Notifier } from "../notifications/notifier.js";
+import { NoopNotifier } from "../notifications/notifier.js";
 import type { ChatStore } from "./store.js";
 import type {
   ChatAttachment,
@@ -14,10 +16,14 @@ import type {
 } from "./types.js";
 
 export class ChatService {
+  private readonly notifier: Notifier;
   constructor(
     private readonly store: ChatStore,
-    private readonly marketplaceStore: MarketplaceStore
-  ) {}
+    private readonly marketplaceStore: MarketplaceStore,
+    notifier?: Notifier
+  ) {
+    this.notifier = notifier ?? new NoopNotifier();
+  }
 
   async listThreads(auth: AccessTokenClaims): Promise<{ threads: ChatThreadSummary[] }> {
     const threads = await this.store.listThreadsForUser(auth.sub);
@@ -90,6 +96,15 @@ export class ChatService {
       threadId: thread.id,
       userId: recipientUserId
     });
+
+    if (created) {
+      await this.notifier.notifyNewChatMessage({
+        recipientUserId,
+        senderUserId: auth.sub,
+        threadId: thread.id,
+        preview: message.body
+      });
+    }
 
     return {
       message,

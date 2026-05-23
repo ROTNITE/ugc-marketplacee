@@ -4,6 +4,8 @@ import type { ApiConfig } from "../config.js";
 import type { AccessTokenClaims } from "../auth/security.js";
 import type { UserRole } from "../auth/types.js";
 import type { RewardsService } from "../rewards/service.js";
+import type { Notifier } from "../notifications/notifier.js";
+import { NoopNotifier } from "../notifications/notifier.js";
 import type {
   CampaignFeedFilters,
   CreatorFeedFilters,
@@ -62,13 +64,17 @@ const allowedFormats = [
 ] as const satisfies readonly ContentFormat[];
 
 export class MarketplaceService {
+  private readonly notifier: Notifier;
   constructor(
     private readonly store: MarketplaceStore,
     private readonly config: Pick<ApiConfig, "bannedKeywords"> = {
       bannedKeywords: []
     },
-    private readonly rewardsService?: RewardsService
-  ) {}
+    private readonly rewardsService?: RewardsService,
+    notifier?: Notifier
+  ) {
+    this.notifier = notifier ?? new NoopNotifier();
+  }
 
   async getMyProfile(auth: AccessTokenClaims): Promise<ProfileRecord> {
     const existing = await this.store.getProfile(auth.sub);
@@ -279,6 +285,24 @@ export class MarketplaceService {
             brandUserId: match.brandUserId
           })
         )
+    );
+    await Promise.all(
+      matches
+        .filter((match) => match.created)
+        .map(async ({ match }) => {
+          const campaign = await this.store.getCampaignById(match.campaignId);
+          const title = campaign?.title ?? null;
+          await this.notifier.notifyNewMatch({
+            recipientUserId: match.creatorUserId,
+            matchId: match.id,
+            campaignTitle: title
+          });
+          await this.notifier.notifyNewMatch({
+            recipientUserId: match.brandUserId,
+            matchId: match.id,
+            campaignTitle: title
+          });
+        })
     );
 
     return {
