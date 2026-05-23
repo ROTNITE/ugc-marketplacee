@@ -32,6 +32,8 @@
     "typescript-eslint": "^8.0.0"
   },
   "dependencies": {
-    "engine.io-client": "^6.6.5"
+    "engine.io-client": "^6.6.5",
+    "react": "^19.2.6",
+    "socket.io-client": "^4.8.3"
   }
 }

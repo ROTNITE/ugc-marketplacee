@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { apiRequest, apiUrl, useAuth } from "../auth-context";
 import { useI18n } from "../i18n";
-import { Gate } from "../ui";
+import { Gate, PageHeader, PageShell, StatusPill } from "../ui";
 
 type ChatAttachment = {
   type: "image" | "video";
@@ -66,6 +66,7 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [connectionState, setConnectionState] = useState("offline");
   const [error, setError] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const selectedThread = useMemo(
     () => threads.find((thread) => thread.thread.id === selectedThreadId) ?? null,
@@ -76,6 +77,10 @@ export default function ChatPage() {
   useEffect(() => {
     selectedThreadIdRef.current = selectedThreadId;
   }, [selectedThreadId]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const loadThreads = useCallback(async () => {
     if (!auth.accessToken) {
@@ -197,7 +202,7 @@ export default function ChatPage() {
   async function sendMessage() {
     const socket = socketRef.current;
 
-    if (!selectedThreadId || !socket) {
+    if (!selectedThreadId || !socket || !body.trim()) {
       return;
     }
 
@@ -253,7 +258,14 @@ export default function ChatPage() {
   }
 
   if (auth.loading) {
-    return <main className="auth-shell">{t("chat.loading")}</main>;
+    return (
+      <PageShell wide>
+        <div className="chat-loading">
+          <div className="chat-loading-spinner" />
+          <p>{t("chat.loading")}</p>
+        </div>
+      </PageShell>
+    );
   }
 
   if (!auth.user) {
@@ -267,82 +279,217 @@ export default function ChatPage() {
   }
 
   return (
-    <main className="chat-shell">
-      <header className="feed-header">
-        <div>
-          <p className="eyebrow">{t("nav.chat")}</p>
-          <h1>
-            {t("chat.conversations")} {totalUnread ? `(${totalUnread})` : ""}
-          </h1>
-          <p>{t(`status.${connectionState}`)}</p>
-        </div>
-        <Link href="/">{t("nav.home")}</Link>
-      </header>
-      <section className="chat-layout">
-        <aside className="thread-list">
-          {threads.length === 0 ? <p>{t("chat.emptyThreads")}</p> : null}
-          {threads.map((thread) => (
-            <button
-              className="thread-button"
-              key={thread.thread.id}
-              onClick={() => setSelectedThreadId(thread.thread.id)}
-              type="button"
-            >
-              <strong>{thread.campaign?.title ?? t("chat.campaignChat")}</strong>
-              <span>{thread.creatorProfile?.displayName ?? t("role.creator")}</span>
-              {thread.lastMessage ? (
-                <span>{thread.lastMessage.body || t("chat.attachment")}</span>
-              ) : null}
-              {thread.unreadCount ? <b>{thread.unreadCount}</b> : null}
-            </button>
-          ))}
-        </aside>
-        <section className="chat-panel">
-          {!selectedThread ? <p>{t("chat.select")}</p> : null}
-          {selectedThread ? (
-            <>
-              <div className="chat-title">
-                <strong>
-                  {selectedThread.campaign?.title ?? t("chat.campaignChat")}
-                </strong>
-                <span>
-                  {selectedThread.creatorProfile?.displayName ?? t("role.creator")}
-                </span>
+    <PageShell wide>
+      <PageHeader
+        eyebrow={t("nav.chat")}
+        title={
+          totalUnread
+            ? `${t("chat.conversations")} (${totalUnread})`
+            : t("chat.conversations")
+        }
+        action={
+          <div className="chat-header-actions">
+            <StatusPill>
+              <span
+                className={`connection-dot ${connectionState === "online" ? "online" : connectionState === "reconnecting" ? "reconnecting" : "offline"}`}
+              />
+              {t(`status.${connectionState}`)}
+            </StatusPill>
+            <Link href="/" className="button secondary">
+              {t("nav.home")}
+            </Link>
+          </div>
+        }
+      />
+
+      <div className="chat-container">
+        <aside className="chat-sidebar">
+          <div className="chat-sidebar-header">
+            <span className="chat-sidebar-title">{t("chat.threads")}</span>
+            {threads.length > 0 && (
+              <span className="chat-thread-count">{threads.length}</span>
+            )}
+          </div>
+          <div className="chat-thread-list">
+            {threads.length === 0 ? (
+              <div className="chat-empty-state">
+                <div className="chat-empty-icon">
+                  <svg
+                    width="48"
+                    height="48"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                  >
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                </div>
+                <p>{t("chat.emptyThreads")}</p>
               </div>
-              <div className="message-list">
+            ) : null}
+            {threads.map((thread) => (
+              <button
+                className={`chat-thread-item ${selectedThreadId === thread.thread.id ? "active" : ""}`}
+                key={thread.thread.id}
+                onClick={() => setSelectedThreadId(thread.thread.id)}
+                type="button"
+              >
+                <div className="chat-thread-avatar">
+                  {(
+                    thread.creatorProfile?.displayName?.[0] ||
+                    thread.campaign?.title?.[0] ||
+                    "C"
+                  ).toUpperCase()}
+                </div>
+                <div className="chat-thread-content">
+                  <div className="chat-thread-header">
+                    <strong className="chat-thread-name">
+                      {thread.campaign?.title ?? t("chat.campaignChat")}
+                    </strong>
+                    {thread.unreadCount > 0 && (
+                      <span className="chat-unread-badge">{thread.unreadCount}</span>
+                    )}
+                  </div>
+                  <span className="chat-thread-subtitle">
+                    {thread.creatorProfile?.displayName ?? t("role.creator")}
+                  </span>
+                  {thread.lastMessage && (
+                    <span className="chat-thread-preview">
+                      {thread.lastMessage.body || t("chat.attachment")}
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <section className="chat-main">
+          {!selectedThread ? (
+            <div className="chat-empty-state">
+              <div className="chat-empty-icon">
+                <svg
+                  width="64"
+                  height="64"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                >
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+              </div>
+              <h3>{t("chat.select")}</h3>
+              <p className="chat-empty-hint">{t("chat.selectHint")}</p>
+            </div>
+          ) : (
+            <>
+              <div className="chat-panel-header">
+                <div className="chat-panel-info">
+                  <div className="chat-panel-avatar">
+                    {(
+                      selectedThread.creatorProfile?.displayName?.[0] ||
+                      selectedThread.campaign?.title?.[0] ||
+                      "C"
+                    ).toUpperCase()}
+                  </div>
+                  <div>
+                    <strong className="chat-panel-name">
+                      {selectedThread.campaign?.title ?? t("chat.campaignChat")}
+                    </strong>
+                    <span className="chat-panel-subtitle">
+                      {selectedThread.creatorProfile?.displayName ?? t("role.creator")}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="chat-messages">
                 {messages.length === 0 && !loading ? (
-                  <p>{t("chat.emptyMessages")}</p>
+                  <div className="chat-empty-state small">
+                    <p>{t("chat.emptyMessages")}</p>
+                  </div>
                 ) : null}
+                {loading && (
+                  <div className="chat-loading-messages">
+                    <div className="chat-loading-spinner small" />
+                  </div>
+                )}
                 {messages.map((message) => (
                   <article
-                    className={
-                      message.senderUserId === auth.user?.id ? "message mine" : "message"
-                    }
+                    className={`chat-message ${message.senderUserId === auth.user?.id ? "outgoing" : "incoming"}`}
                     key={message.id}
                   >
-                    {message.body ? <p>{message.body}</p> : null}
-                    {message.attachment ? (
-                      <AttachmentPreview attachment={message.attachment} />
-                    ) : null}
-                    <small>{formatDate(message.createdAt)}</small>
-                    <button
-                      className="secondary"
-                      onClick={() => reportMessage(message)}
-                      type="button"
-                    >
-                      {t("action.report")}
-                    </button>
+                    <div className="chat-message-bubble">
+                      {message.body && <p>{message.body}</p>}
+                      {message.attachment && (
+                        <AttachmentPreview attachment={message.attachment} />
+                      )}
+                      <div className="chat-message-meta">
+                        <time>{formatDate(message.createdAt)}</time>
+                        <button
+                          className="chat-report-btn"
+                          onClick={() => reportMessage(message)}
+                          type="button"
+                          title={t("action.report")}
+                        >
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                            <line x1="4" y1="22" x2="4" y2="15" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
                   </article>
                 ))}
+                <div ref={messagesEndRef} />
               </div>
-              <div className="composer">
-                <textarea
-                  onChange={(event) => setBody(event.target.value)}
-                  placeholder={t("chat.message")}
-                  value={body}
-                />
-                <div className="attachment-row">
+
+              <div className="chat-composer">
+                <div className="chat-composer-main">
+                  <textarea
+                    className="chat-input"
+                    onChange={(event) => setBody(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        sendMessage();
+                      }
+                    }}
+                    placeholder={t("chat.message")}
+                    value={body}
+                    rows={1}
+                  />
+                  <button
+                    className="chat-send-btn"
+                    onClick={sendMessage}
+                    type="button"
+                    disabled={!body.trim()}
+                  >
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <line x1="22" y1="2" x2="11" y2="13" />
+                      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="chat-attachment-row">
                   <select
+                    className="chat-attachment-type"
                     onChange={(event) =>
                       setAttachmentType(event.target.value as "image" | "video")
                     }
@@ -352,32 +499,30 @@ export default function ChatPage() {
                     <option value="video">{t("chat.video")}</option>
                   </select>
                   <input
+                    className="chat-attachment-url"
                     onChange={(event) => setAttachmentUrl(event.target.value)}
                     placeholder={t("chat.attachmentUrl")}
                     value={attachmentUrl}
                   />
                 </div>
-                <button onClick={sendMessage} type="button">
-                  {t("chat.send")}
-                </button>
               </div>
             </>
-          ) : null}
+          )}
         </section>
-      </section>
-      {loading ? <p>{t("chat.loadingMessages")}</p> : null}
-      {error ? <p className="error">{error}</p> : null}
-    </main>
+      </div>
+
+      {error && <p className="error">{error}</p>}
+    </PageShell>
   );
 }
 
 function AttachmentPreview({ attachment }: { attachment: ChatAttachment }) {
   if (attachment.type === "video") {
-    return <video className="message-media" controls src={attachment.url} />;
+    return <video className="chat-media" controls src={attachment.url} />;
   }
 
   // eslint-disable-next-line @next/next/no-img-element
-  return <img alt="" className="message-media" src={attachment.url} />;
+  return <img alt="" className="chat-media" src={attachment.url} />;
 }
 
 function addUniqueMessage(messages: ChatMessage[], message: ChatMessage): ChatMessage[] {
