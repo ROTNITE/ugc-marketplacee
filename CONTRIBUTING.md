@@ -19,6 +19,8 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## Local development
 
+First-time setup also installs a git pre-commit hook (husky + lint-staged) that runs Prettier on every staged file. No opt-in flags - just `npm install` once.
+
 ```bash
 npm install
 cp .env.example .env
