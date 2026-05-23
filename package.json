@@ -14,7 +14,8 @@
     "format:check": "prettier . --check",
     "lint": "eslint .",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "prepare": "husky"
   },
   "engines": {
     "node": ">=22.0.0",
@@ -27,11 +28,16 @@
     "@eslint/js": "^9.0.0",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^10.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "prettier": "^3.0.0",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.0.0"
   },
   "dependencies": {
     "engine.io-client": "^6.6.5"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,json,md,yml,yaml,css}": "prettier --write"
   }
 }
