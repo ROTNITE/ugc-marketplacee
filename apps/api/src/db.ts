@@ -108,7 +108,22 @@ export async function initializeAuthSchema(pool: pg.Pool): Promise<void> {
       ADD COLUMN IF NOT EXISTS audience_age_max integer;
 
     ALTER TABLE users
-      ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'active';
+      ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'active',
+      ADD COLUMN IF NOT EXISTS date_of_birth date,
+      ADD COLUMN IF NOT EXISTS parental_consent_granted_at timestamptz,
+      ADD COLUMN IF NOT EXISTS parental_consent_email text;
+
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id uuid PRIMARY KEY,
+      user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash text NOT NULL UNIQUE,
+      expires_at timestamptz NOT NULL,
+      consumed_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS password_reset_tokens_user_id_idx
+      ON password_reset_tokens(user_id);
 
     ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
     ALTER TABLE users ADD CONSTRAINT users_role_check

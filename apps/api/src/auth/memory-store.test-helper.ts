@@ -1,13 +1,16 @@
 import type {
   AuthStore,
   CreateEmailOutboxInput,
+  CreatePasswordResetTokenInput,
   CreateRefreshSessionInput,
   CreateUserInput,
-  CreateVerificationTokenInput
+  CreateVerificationTokenInput,
+  ParentalConsentInput
 } from "./store.js";
 import type {
   EmailOutboxRecord,
   EmailVerificationTokenRecord,
+  PasswordResetTokenRecord,
   RefreshSessionRecord,
   UserRecord,
   UserRole,
@@ -18,6 +21,7 @@ export class MemoryAuthStore implements AuthStore {
   readonly users = new Map<string, UserRecord>();
   readonly refreshSessions = new Map<string, RefreshSessionRecord>();
   readonly verificationTokens = new Map<string, EmailVerificationTokenRecord>();
+  readonly passwordResetTokens = new Map<string, PasswordResetTokenRecord>();
   readonly emailOutbox: EmailOutboxRecord[] = [];
 
   async createUser(input: CreateUserInput): Promise<UserRecord> {
@@ -29,6 +33,9 @@ export class MemoryAuthStore implements AuthStore {
       emailVerifiedAt: null,
       role: input.role,
       status: "active",
+      dateOfBirth: input.dateOfBirth,
+      parentalConsentGrantedAt: null,
+      parentalConsentEmail: null,
       createdAt: now,
       updatedAt: now
     };
@@ -88,6 +95,52 @@ export class MemoryAuthStore implements AuthStore {
     return next;
   }
 
+  async updateUserPasswordHash(
+    userId: string,
+    passwordHash: string
+  ): Promise<UserRecord> {
+    const user = this.requireUser(userId);
+    const next = { ...user, passwordHash, updatedAt: new Date() };
+    this.users.set(userId, next);
+    return next;
+  }
+
+  async setParentalConsent(input: ParentalConsentInput): Promise<UserRecord> {
+    const user = this.requireUser(input.userId);
+    const next = {
+      ...user,
+      parentalConsentGrantedAt: input.grantedAt,
+      parentalConsentEmail: input.parentEmail,
+      updatedAt: input.grantedAt
+    };
+    this.users.set(input.userId, next);
+    return next;
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    this.users.delete(userId);
+    for (const session of [...this.refreshSessions.values()]) {
+      if (session.userId === userId) {
+        this.refreshSessions.delete(session.id);
+      }
+    }
+    for (const token of [...this.verificationTokens.values()]) {
+      if (token.userId === userId) {
+        this.verificationTokens.delete(token.id);
+      }
+    }
+    for (const token of [...this.passwordResetTokens.values()]) {
+      if (token.userId === userId) {
+        this.passwordResetTokens.delete(token.id);
+      }
+    }
+    for (let i = this.emailOutbox.length - 1; i >= 0; i -= 1) {
+      if (this.emailOutbox[i]?.userId === userId) {
+        this.emailOutbox.splice(i, 1);
+      }
+    }
+  }
+
   async createVerificationToken(
     input: CreateVerificationTokenInput
   ): Promise<EmailVerificationTokenRecord> {
@@ -115,6 +168,35 @@ export class MemoryAuthStore implements AuthStore {
 
     if (token) {
       this.verificationTokens.set(id, { ...token, consumedAt });
+    }
+  }
+
+  async createPasswordResetToken(
+    input: CreatePasswordResetTokenInput
+  ): Promise<PasswordResetTokenRecord> {
+    const token = {
+      ...input,
+      consumedAt: null,
+      createdAt: new Date()
+    };
+    this.passwordResetTokens.set(token.id, token);
+    return token;
+  }
+
+  async findPasswordResetTokenByHash(
+    tokenHash: string
+  ): Promise<PasswordResetTokenRecord | null> {
+    return (
+      [...this.passwordResetTokens.values()].find(
+        (token) => token.tokenHash === tokenHash
+      ) ?? null
+    );
+  }
+
+  async consumePasswordResetToken(id: string, consumedAt: Date): Promise<void> {
+    const token = this.passwordResetTokens.get(id);
+    if (token) {
+      this.passwordResetTokens.set(id, { ...token, consumedAt });
     }
   }
 

@@ -14,14 +14,18 @@ import {
 } from "./security.js";
 import type { AuthStore } from "./store.js";
 import type { AuthResult, PublicUser, PublicUserRole, UserRecord } from "./types.js";
-import { isPublicUserRole, toPublicUser } from "./types.js";
+import { calculateAgeYears, isPublicUserRole, toPublicUser } from "./types.js";
 import type { RewardsService } from "../rewards/service.js";
+
+const MIN_REGISTRATION_AGE = 13;
+const PARENTAL_CONSENT_TTL_HOURS_DEFAULT = 72;
 
 export type RegisterInput = {
   email: unknown;
   password: unknown;
   role: unknown;
   referralCode?: unknown;
+  dateOfBirth?: unknown;
 };
 
 export type LoginInput = {
@@ -39,6 +43,24 @@ export type ResendVerificationInput = {
 
 export type SwitchRoleInput = {
   role: unknown;
+};
+
+export type RequestPasswordResetInput = {
+  email: unknown;
+};
+
+export type ResetPasswordInput = {
+  token: unknown;
+  password: unknown;
+};
+
+export type ParentalConsentRequestInput = {
+  parentEmail: unknown;
+};
+
+export type UserDataExport = {
+  user: PublicUser;
+  emailOutbox: Array<{ subject: string; createdAt: Date }>;
 };
 
 export class AuthService {
@@ -72,7 +94,8 @@ export class AuthService {
       id: randomUUID(),
       email: payload.email,
       passwordHash: await hashPassword(payload.password),
-      role: payload.role
+      role: payload.role,
+      dateOfBirth: payload.dateOfBirth
     });
     if (this.rewardsService) {
       await this.rewardsService.initializeUser(user.id, payload.referralCode);
@@ -127,6 +150,109 @@ export class AuthService {
 
     await this.createVerificationEmail(user);
     return { sent: true };
+  }
+
+  async requestPasswordReset(input: RequestPasswordResetInput): Promise<void> {
+    if (typeof input.email !== "string") {
+      throw authErrors.invalidPayload();
+    }
+
+    const user = await this.store.findUserByEmail(normalizeEmail(input.email));
+
+    // Silent return prevents email enumeration attacks.
+    if (!user || user.status === "banned") {
+      return;
+    }
+
+    await this.createPasswordResetEmail(user);
+  }
+
+  async resetPassword(input: ResetPasswordInput, now = new Date()): Promise<void> {
+    if (
+      typeof input.token !== "string" ||
+      input.token.trim().length === 0 ||
+      typeof input.password !== "string" ||
+      input.password.length < 8
+    ) {
+      throw authErrors.invalidPayload();
+    }
+
+    const tokenHash = hashOpaqueToken(input.token.trim());
+    const token = await this.store.findPasswordResetTokenByHash(tokenHash);
+
+    if (!token) {
+      throw authErrors.invalidToken();
+    }
+    if (token.consumedAt) {
+      throw authErrors.tokenUsed();
+    }
+    if (token.expiresAt.getTime() <= now.getTime()) {
+      throw authErrors.tokenExpired();
+    }
+
+    await this.store.consumePasswordResetToken(token.id, now);
+    await this.store.updateUserPasswordHash(
+      token.userId,
+      await hashPassword(input.password)
+    );
+    // For security, revoke all refresh sessions so attackers with stolen
+    // refresh tokens are immediately kicked out.
+    await this.store.revokeUserRefreshSessions(token.userId, now);
+  }
+
+  async grantParentalConsent(
+    userId: string,
+    input: ParentalConsentRequestInput,
+    now = new Date()
+  ): Promise<{ user: PublicUser }> {
+    if (typeof input.parentEmail !== "string") {
+      throw authErrors.invalidPayload();
+    }
+
+    const parentEmail = normalizeEmail(input.parentEmail);
+    if (!isValidEmail(parentEmail)) {
+      throw authErrors.invalidPayload();
+    }
+
+    const user = await this.store.findUserById(userId);
+    if (!user) {
+      throw authErrors.userNotFound();
+    }
+
+    const updated = await this.store.setParentalConsent({
+      userId,
+      parentEmail,
+      grantedAt: now
+    });
+
+    return { user: toPublicUser(updated, now) };
+  }
+
+  async deleteAccount(userId: string, now = new Date()): Promise<void> {
+    const user = await this.store.findUserById(userId);
+    if (!user) {
+      throw authErrors.userNotFound();
+    }
+    await this.store.revokeUserRefreshSessions(userId, now);
+    await this.store.deleteUser(userId);
+  }
+
+  async exportUserData(userId: string): Promise<UserDataExport> {
+    const user = await this.store.findUserById(userId);
+    if (!user) {
+      throw authErrors.userNotFound();
+    }
+
+    // Email outbox is dev-only metadata; we surface subjects/dates only to
+    // satisfy "right of access" without leaking verification tokens.
+    const outbox = (await this.store.listEmailOutbox())
+      .filter((entry) => entry.userId === userId)
+      .map((entry) => ({ subject: entry.subject, createdAt: entry.createdAt }));
+
+    return {
+      user: toPublicUser(user),
+      emailOutbox: outbox
+    };
   }
 
   async login(input: LoginInput): Promise<AuthResult> {
@@ -302,6 +428,26 @@ export class AuthService {
       token
     });
   }
+
+  private async createPasswordResetEmail(user: UserRecord): Promise<void> {
+    const token = createOpaqueToken();
+    const resetUrl = `${this.config.webAppUrl}/reset-password?token=${token}`;
+
+    await this.store.createPasswordResetToken({
+      id: randomUUID(),
+      userId: user.id,
+      tokenHash: hashOpaqueToken(token),
+      expiresAt: addHours(new Date(), PARENTAL_CONSENT_TTL_HOURS_DEFAULT)
+    });
+    await this.store.createEmailOutbox({
+      id: randomUUID(),
+      userId: user.id,
+      email: user.email,
+      subject: "Reset your UGC Marketplace password",
+      body: `Open this link to reset your password: ${resetUrl}`,
+      token
+    });
+  }
 }
 
 function parseRegisterInput(input: RegisterInput): {
@@ -309,6 +455,7 @@ function parseRegisterInput(input: RegisterInput): {
   password: string;
   role: PublicUserRole;
   referralCode?: unknown;
+  dateOfBirth: Date | null;
 } {
   if (
     typeof input.email !== "string" ||
@@ -324,11 +471,31 @@ function parseRegisterInput(input: RegisterInput): {
     throw authErrors.invalidPayload();
   }
 
+  let dateOfBirth: Date | null = null;
+  if (input.dateOfBirth !== undefined && input.dateOfBirth !== null) {
+    if (typeof input.dateOfBirth !== "string") {
+      throw authErrors.invalidPayload();
+    }
+    const parsed = new Date(input.dateOfBirth);
+    if (Number.isNaN(parsed.getTime())) {
+      throw authErrors.invalidPayload();
+    }
+    const age = calculateAgeYears(parsed);
+    if (age < MIN_REGISTRATION_AGE) {
+      throw authErrors.underageNotAllowed();
+    }
+    if (age > 120) {
+      throw authErrors.invalidPayload();
+    }
+    dateOfBirth = parsed;
+  }
+
   return {
     email,
     password: input.password,
     role: input.role,
-    referralCode: input.referralCode
+    referralCode: input.referralCode,
+    dateOfBirth
   };
 }
 

@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import { PaymentService } from "./service.js";
 import { requireAuth } from "../auth/middleware.js";
+import { requireAdultActions } from "../auth/adult-actions.js";
 import type { AuthStore } from "../auth/store.js";
 import type { AccessTokenClaims } from "../auth/security.js";
 import type { ApiConfig } from "../config.js";
@@ -15,6 +16,7 @@ export function createPaymentRoutes(
 ): Router {
   const router = Router();
   const protectedRoute = requireAuth(config, authStore);
+  const adultActions = authStore ? requireAdultActions(authStore) : null;
 
   // Get user balance
   router.get(
@@ -48,6 +50,7 @@ export function createPaymentRoutes(
   router.post(
     "/escrow/fund",
     protectedRoute,
+    ...(adultActions ? [adultActions] : []),
     route(async (req: Request, res: Response) => {
       const { auth } = req as AuthRequest;
       const { matchId, amountCents } = req.body;
@@ -82,6 +85,7 @@ export function createPaymentRoutes(
   router.post(
     "/escrow/release",
     protectedRoute,
+    ...(adultActions ? [adultActions] : []),
     route(async (req: Request, res: Response) => {
       const { auth } = req as AuthRequest;
       const { escrowHoldId } = req.body;
@@ -108,6 +112,7 @@ export function createPaymentRoutes(
   router.post(
     "/escrow/refund",
     protectedRoute,
+    ...(adultActions ? [adultActions] : []),
     route(async (req: Request, res: Response) => {
       const { auth } = req as AuthRequest;
       const { escrowHoldId, reason } = req.body;
@@ -132,6 +137,7 @@ export function createPaymentRoutes(
   router.post(
     "/payout",
     protectedRoute,
+    ...(adultActions ? [adultActions] : []),
     route(async (req: Request, res: Response) => {
       const { auth } = req as AuthRequest;
       const { amountCents } = req.body;
@@ -268,10 +274,12 @@ export function createDeliverableRoutes(
 ): Router {
   const router = Router();
   const protectedRoute = requireAuth(config, authStore);
+  const adultActions = authStore ? requireAdultActions(authStore) : null;
 
   router.post(
     "/deliverables",
     protectedRoute,
+    ...(adultActions ? [adultActions] : []),
     route(async (req: Request, res: Response) => {
       const { auth } = req as AuthRequest;
       const { matchId, url, note } = req.body;

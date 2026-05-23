@@ -6,6 +6,7 @@ import { createApp } from "../app.js";
 import { loadConfig } from "../config.js";
 import { hashOpaqueToken, signAccessToken } from "./security.js";
 import { MemoryAuthStore } from "./memory-store.test-helper.js";
+import { _resetRateLimitStoreForTests } from "./rate-limit.js";
 import type { PublicUser } from "./types.js";
 
 const config = loadConfig({
@@ -28,6 +29,7 @@ let server: Server;
 let baseUrl: string;
 
 beforeEach(async () => {
+  _resetRateLimitStoreForTests();
   store = new MemoryAuthStore();
   server = createApp({ config, authStore: store }).listen(0);
   await once(server, "listening");
@@ -221,7 +223,9 @@ test("protected routes reject missing and expired access tokens", async () => {
       email: "expired@example.com",
       emailVerified: true,
       role: "creator",
-      status: "active"
+      status: "active",
+      isMinor: false,
+      parentalConsentGranted: true
     } satisfies PublicUser,
     { jwtSecret: config.jwtSecret, accessTokenTtlSeconds: -1 }
   );
