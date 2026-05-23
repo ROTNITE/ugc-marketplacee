@@ -1,0 +1,81 @@
+export type UserRole = "creator" | "brand" | "admin";
+export type PublicUserRole = Exclude<UserRole, "admin">;
+export type UserStatus = "active" | "banned";
+
+export type UserRecord = {
+  id: string;
+  email: string;
+  passwordHash: string;
+  emailVerifiedAt: Date | null;
+  role: UserRole;
+  status: UserStatus;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type PublicUser = {
+  id: string;
+  email: string;
+  emailVerified: boolean;
+  role: UserRole;
+  status: UserStatus;
+};
+
+export type RefreshSessionRecord = {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  expiresAt: Date;
+  revokedAt: Date | null;
+  replacedBySessionId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type EmailVerificationTokenRecord = {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  expiresAt: Date;
+  consumedAt: Date | null;
+  createdAt: Date;
+};
+
+export type EmailOutboxRecord = {
+  id: string;
+  userId: string;
+  email: string;
+  subject: string;
+  body: string;
+  token: string;
+  createdAt: Date;
+};
+
+export type AuthTokens = {
+  accessToken: string;
+  refreshToken: string;
+};
+
+export type AuthResult = {
+  user: PublicUser;
+  accessToken: string;
+  refreshToken: string;
+};
+
+export function toPublicUser(user: UserRecord): PublicUser {
+  return {
+    id: user.id,
+    email: user.email,
+    emailVerified: user.emailVerifiedAt !== null,
+    role: user.role,
+    status: user.status
+  };
+}
+
+export function isUserRole(value: unknown): value is UserRole {
+  return value === "creator" || value === "brand" || value === "admin";
+}
+
+export function isPublicUserRole(value: unknown): value is PublicUserRole {
+  return value === "creator" || value === "brand";
+}
